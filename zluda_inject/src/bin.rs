@@ -26,7 +26,7 @@ static REDIRECT_DLL: &'static str = "zluda_redirect.dll";
 static NVCUDA_DLL: &'static str = "nvcuda.dll";
 static NVML_DLL: &'static str = "nvml.dll";
 static NVAPI_DLL: &'static str = "nvapi64.dll";
-static NVOPTIX_DLL: &'static str = "optix.6.6.0.dll";
+static NVOPTIX_DLL: &'static str = "optix.6.0.0.dll";
 
 include!("../../zluda_redirect/src/payload_guid.rs");
 

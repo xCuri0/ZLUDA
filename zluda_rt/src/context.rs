@@ -80,6 +80,8 @@ const MAX_GPU_STACK: usize = 16 * 1_024;
 impl ContextData {
     pub(crate) fn new() -> Result<Self, RTresult> {
         hip! { hipInit(0), RT_ERROR_CONTEXT_CREATION_FAILED };
+
+        print!("Create HIPRT Context 3\n");
         let comgr = comgr::Comgr::find_and_load()
             .map_err(|_| RTresult::RT_ERROR_CONTEXT_CREATION_FAILED)?;
         let mut stack_size = 0;
@@ -94,6 +96,7 @@ impl ContextData {
             device: 0,
             deviceType: hiprtDeviceType::hiprtDeviceAMD,
         };
+        print!("Create HIPRT Context 4\n");
         let hiprt =
             unsafe { HipRt::load() }.map_err(|_| RTresult::RT_ERROR_CONTEXT_CREATION_FAILED)?;
         let mut context = ptr::null_mut();
@@ -101,6 +104,7 @@ impl ContextData {
             hiprt.hiprtCreateContext(HIPRT_API_VERSION, &mut context_input, &mut context),
             RT_ERROR_CONTEXT_CREATION_FAILED
         };
+        print!("Created HIPRT Contexts 5\n");
         let isa = unsafe {
             hip_common::comgr_isa(0).map_err(|_| RTresult::RT_ERROR_CONTEXT_CREATION_FAILED)?
         };
@@ -323,6 +327,7 @@ pub(crate) unsafe fn set_ray_type_count(
 
 pub(crate) unsafe fn create(context: *mut Context) -> Result<(), RTresult> {
     null_check(context)?;
+    print!("Create HIPRT Context 2\n");
     *context = Rc::into_raw(Rc::new(OptixCell::new(ContextData::new()?))) as *mut _;
     Ok(())
 }

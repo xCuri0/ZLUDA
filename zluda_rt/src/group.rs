@@ -188,7 +188,9 @@ impl GroupData {
                     hiprt_geometry,
                 } => {
                     hiprt_instances_host.push(hiprt_geometry);
-                    hiprt! { ctx.hiprt.hiprtSetCustomFuncTable(ctx.context, custom_func_table, custom_func_set_counter, custom_func_set), RT_ERROR_UNKNOWN };
+
+                    // CHECK THIS
+                    hiprt! { ctx.hiprt.hiprtSetFuncTable(ctx.context, custom_func_table, 0, custom_func_set_counter, custom_func_set), RT_ERROR_UNKNOWN };
                     custom_func_set_counter += 1;
                 }
                 DeviceGeometryInstance::GeometryTriangles { hiprt_geometry } => {
@@ -204,7 +206,7 @@ impl GroupData {
                         let transform = transform.borrow()?;
                         transform.to_hiprt()
                     }
-                    None => hiprtFrame {
+                    None => hiprtFrameSRT {
                         translation: hiprtFloat3 {
                             x: 0f32,
                             y: 0f32,
@@ -222,7 +224,6 @@ impl GroupData {
                             w: 0f32,
                         },
                         time: 0f32,
-                        pad: 0,
                     },
                 })
             })
@@ -231,15 +232,17 @@ impl GroupData {
         let instance_frames = allocator.copy_to_device(&instance_frames_host[..])?;
         let scene_input = hiprtSceneBuildInput {
             instanceCount: children.len() as u32,
-            instanceGeometries: instance_geometries.0,
+            instances: instance_geometries.0,
             frameCount: children.len() as u32,
             instanceFrames: instance_frames.0,
-            nodes: ptr::null_mut(),
+            nodeList: hiprtBvhNodeList{nodes: ptr::null_mut(), nodeCount: 0},
             instanceTransformHeaders: ptr::null_mut(),
             instanceMasks: ptr::null_mut(),
+            frameType: hiprtFrameType::hiprtFrameTypeSRT,
         };
         let build_options = hiprtBuildOptions {
-            buildFlags: build_flags.0,
+            buildFlags: build_flags.0 as u32,
+            batchBuildMaxPrimCount: 512,
         };
         let transform_blocks = transforms
             .iter()
@@ -263,7 +266,7 @@ impl GroupData {
 
     // We assume lower 2 bits are operator, higher bits are flags
     fn join_build_flags(f1: hiprtBuildFlagBits, f2: hiprtBuildFlagBits) -> hiprtBuildFlagBits {
-        let op = u32::max(f1.0 & 3, f2.0 & 3);
+        let op = i32::max(f1.0 & 3, f2.0 & 3);
         let flags = ((f1.0 >> 2) | (f2.0 >> 2)) << 2;
         return hiprtBuildFlagBits(op | flags);
     }

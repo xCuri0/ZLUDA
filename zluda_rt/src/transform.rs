@@ -8,7 +8,7 @@ use crate::{
 
 use glam::{Quat, Vec3};
 use hip_runtime_sys::hipDeviceptr_t;
-use hiprt_sys::{hiprtFloat3, hiprtFloat4, hiprtFrame};
+use hiprt_sys::{hiprtFloat3, hiprtFloat4, hiprtFrameSRT};
 use optix_types::*;
 use std::{
     ptr,
@@ -67,16 +67,15 @@ impl TransformData {
             .map_err(|_| RTresult::RT_ERROR_UNKNOWN)
     }
 
-    pub(crate) fn to_hiprt(&self) -> hiprtFrame {
+    pub(crate) fn to_hiprt(&self) -> hiprtFrameSRT {
         let rotation = Self::quat_to_hiprt(self.rotation);
         let scale = Self::vec3_to_hiprt(self.scale);
         let translation = Self::vec3_to_hiprt(self.translation);
-        hiprtFrame {
+        hiprtFrameSRT {
             rotation,
             scale,
             translation,
             time: 0.0,
-            pad: 0,
         }
     }
 

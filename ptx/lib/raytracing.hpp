@@ -205,7 +205,7 @@ __device__ void GLOBAL_SPACE* byte_offset(T GLOBAL_SPACE* ptr, uint32_t offset) 
 }
 
 // https://stackoverflow.com/a/9194117
-__device__ static inline int ZLUDA_RT(round_up)(int number, int multiple) 
+__device__ static inline int ZLUDA_RT(round_up)(int number, int multiple)
 {
     return (number + multiple - 1) & -multiple;
 }
@@ -310,7 +310,7 @@ struct HitProgramChain {
 
 struct BvhDetails {
     hiprtScene scene;
-    hiprtCustomFuncTable func_set;
+    hiprtFuncTable func_set;
     void CONSTANT_SPACE* attribute_programs;
     uint8_t GLOBAL_SPACE* GLOBAL_SPACE* transform_blocks;
     HitProgramChain GLOBAL_SPACE* GLOBAL_SPACE* hit_chains;
@@ -394,7 +394,7 @@ using SceneHeader = hiprt::SceneHeader;
 using Transform = hiprt::Transform;
 template <typename Stack>
 using TraversalBase = hiprt::TraversalBase<Stack>;
-template<u32 StackSize>
+template<uint32_t StackSize>
 using PrivateStack = hiprt::PrivateStack<StackSize>;
 
 struct IntersectResult {
@@ -416,7 +416,7 @@ struct hiprtHit2 {
 	HIPRT_DEVICE bool hasHit() const { return primID != hiprtInvalidValue; }
 };
 
-typedef IntersectResult ( *hiprtIntersectFunc2 )(hiprtRay ray, u32 primIdx, const void* data, void* payload );
+typedef IntersectResult ( *hiprtIntersectFunc2 )(hiprtRay ray, uint32_t primIdx, const void* data, void* payload );
 
 template <typename Stack, hiprtTraversalType TraversalType>
 class SceneTraversal2 : public TraversalBase<Stack>
@@ -425,7 +425,7 @@ public:
 	HIPRT_DEVICE SceneTraversal2( hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, Stack& stack );
 
 	HIPRT_DEVICE SceneTraversal2(
-		hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, hiprtCustomFuncTable funcTable, Stack& stack, void* payload = nullptr );
+		hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, hiprtFuncTable funcTable, Stack& stack, void* payload = nullptr );
 
 	HIPRT_DEVICE void transformRay( Ray& ray, float3& invD, float3& oxInvD, const InstanceNode& node ) const;
 
@@ -468,7 +468,7 @@ protected:
 	GeomHeader**		 m_geoms;
 	Frame*				 m_frames;
 	hiprtRayMask		 m_mask;
-	hiprtCustomFuncTable m_funcTable;
+	hiprtFuncTable m_funcTable;
 };
 
 template <typename Stack, hiprtTraversalType TraversalType>
@@ -485,7 +485,7 @@ HIPRT_DEVICE SceneTraversal2<Stack, TraversalType>::SceneTraversal2( hiprtScene 
 
 template <typename Stack, hiprtTraversalType TraversalType>
 HIPRT_DEVICE SceneTraversal2<Stack, TraversalType>::SceneTraversal2(
-	hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, hiprtCustomFuncTable funcTable, Stack& stack, void* payload )
+	hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, hiprtFuncTable funcTable, Stack& stack, void* payload )
 	: TraversalBase<Stack>( ray, stack, payload ), m_funcTable( funcTable ), m_mask( mask ), m_instanceIndex( hiprtInvalidValue ),
 	  m_nodeIndex( hiprt::RootIndex )
 {
@@ -521,7 +521,7 @@ __device__ static inline Ray transformRay2(Transform& transform, Ray& ray)
 		outRay.m_maxT	   = ray.m_maxT;
         return outRay;
     }
-    else 
+    else
     {
         return ray;
     }
@@ -595,7 +595,7 @@ HIPRT_DEVICE bool SceneTraversal2<Stack, TraversalType>::testLeafNode(
 	else
 	{
 		CustomNode			node	  = ( (CustomNode*)geom->m_primNodes )[hiprt::getNodeAddr( leafIndex )];
-		hiprtCustomFuncSet* funcTable = (hiprtCustomFuncSet*)m_funcTable;
+		hiprtCustomFuncSet* funcTable = (hiprtFuncSet*)m_funcTable;
 		IntersectResult     result    = ((hiprtIntersectFunc2)(funcTable[type].intersectFunc))(
 			  reinterpret_cast<const hiprtRay&>(ray),
 			  node.m_primIndex,
@@ -670,9 +670,9 @@ HIPRT_DEVICE hiprtHit2 SceneTraversal2<Stack, TraversalType>::getNextHit2()
 						Transform	 tr( m_frames + node.m_frameIndex, node.m_frameCount );
 						hitNormal = tr.transformNormal( hitNormal, ray.m_time );
 						return hiprtHit2
-                        { 
-                            (u32)instanceId,
-                            (u32)hitPrimIndex,
+                        {
+                            (uint32_t)instanceId,
+                            (uint32_t)hitPrimIndex,
                             hitUv,
                             hitNormal,
                             hitT,
@@ -826,7 +826,7 @@ extern "C" {
             if (!hit.hasHit())
                 break;
             if (hit.t < tmin)
-                continue; 
+                continue;
             tr.set_ray_maxT(hit.t);
             // Successful custom intersection hit
             if (intersection_payload.material != ~uint32_t(0)) {

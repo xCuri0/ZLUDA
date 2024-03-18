@@ -112,8 +112,9 @@ unsafe fn test(ptx_txt: &str, llvm_ir: &[u8], llvm_file_name: &str, fn_name: &st
         .map(|s| s.as_ptr())
         .collect::<Vec<_>>();
     assert!(
-        hiprt.hiprtBuildTraceProgram(
+        hiprt.hiprtBuildTraceKernels(
             context,
+            1,
             translate::RaytracingModule::KERNEL_NAME.as_ptr(),
             raytracing_module.kernel_source.as_ptr() as _,
             "zluda_rt_kernel\0".as_ptr() as _,
@@ -122,7 +123,12 @@ unsafe fn test(ptx_txt: &str, llvm_ir: &[u8], llvm_file_name: &str, fn_name: &st
             header_names.as_ptr() as _,
             options.as_ptr() as _,
             options.len() as i32,
+            0,
+            1, // CHECK
+            std::ptr::null(),
+            std::ptr::null(), // CHANGE IF NOT WORK
             (&mut rt_program) as *mut _ as _,
+            false,
         ) == hiprtError(0)
     );
     // It would be intresting to compile into a relocatable to check for

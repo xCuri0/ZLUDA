@@ -136,7 +136,7 @@ impl GeometryGroupData {
                     hiprt_geometry,
                 } => {
                     hiprt_instances_host.push(hiprt_geometry);
-                    hiprt! { ctx.hiprt.hiprtSetCustomFuncTable(ctx.context, custom_func_table, custom_func_set_counter, custom_func_set), RT_ERROR_UNKNOWN };
+                    hiprt! { ctx.hiprt.hiprtSetFuncTable(ctx.context, custom_func_table, 0, custom_func_set_counter, custom_func_set), RT_ERROR_UNKNOWN };
                     custom_func_set_counter += 1;
                 }
                 DeviceGeometryInstance::GeometryTriangles { hiprt_geometry } => {
@@ -145,7 +145,7 @@ impl GeometryGroupData {
             };
         }
         let instance_frames_host = vec![
-            hiprtFrame {
+            hiprtFrameSRT {
                 translation: hiprtFloat3 {
                     x: 0f32,
                     y: 0f32,
@@ -163,7 +163,6 @@ impl GeometryGroupData {
                     w: 0f32,
                 },
                 time: 0f32,
-                pad: 0,
             };
             self.children.len()
         ];
@@ -173,15 +172,17 @@ impl GeometryGroupData {
         let instance_masks = allocator.copy_to_device(&instance_mask_host[..])?;
         let scene_input = hiprtSceneBuildInput {
             instanceCount: self.children.len() as u32,
-            instanceGeometries: instance_geometries.0,
+            instances: instance_geometries.0,
             frameCount: self.children.len() as u32,
             instanceFrames: instance_frames.0,
-            nodes: ptr::null_mut(),
+            nodeList: hiprtBvhNodeList{nodes: ptr::null_mut(), nodeCount: 0},
             instanceTransformHeaders: ptr::null_mut(),
             instanceMasks: instance_masks.0,
+            frameType: hiprtFrameType::hiprtFrameTypeSRT,
         };
         let build_options = hiprtBuildOptions {
-            buildFlags: build_flags.0,
+            buildFlags: build_flags.0 as u32,
+            batchBuildMaxPrimCount: 512,
         };
         let transform_blocks = vec![hipDeviceptr_t(ptr::null_mut()); self.children.len()];
         let transform_blocks = allocator.copy_to_device(&transform_blocks)?;
@@ -216,7 +217,7 @@ impl OptixObjectData for GeometryGroupData {
 #[repr(C)]
 pub(crate) struct BvhDetails {
     pub(crate) scene: hiprtScene,
-    pub(crate) func_set: hiprtCustomFuncTable,
+    pub(crate) func_set: hiprtFuncTable,
     pub(crate) attribute_call_chain: hipDeviceptr_t,
     pub(crate) transform_blocks: hipDeviceptr_t,
     pub(crate) hit_chains: hipDeviceptr_t,

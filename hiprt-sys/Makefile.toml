@@ -1,7 +1,7 @@
 [tasks.bindgen]
 command = "bindgen"
 args = [
-    "include/hiprt.h",
+    "include/hiprt/hiprt.h",
     "-o", "src/hiprt.rs",
     "--rust-target", "1.64",
     "--no-layout-tests",

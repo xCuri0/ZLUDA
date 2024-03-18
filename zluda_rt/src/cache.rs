@@ -250,7 +250,7 @@ mod tests {
                 "FFFF",
                 "Clang 15",
                 "EEEE",
-                &*CString::new("gfx1030").unwrap(),
+                &*CString::new("gfx803").unwrap(),
                 &vec![0x11, 0x12, 0x13, 0x14],
                 &input_attributes,
                 "1.2",
@@ -264,7 +264,7 @@ mod tests {
                 "FFFF",
                 "Clang 15",
                 "EEEE",
-                &*CString::new("gfx1030").unwrap(),
+                &*CString::new("gfx803").unwrap(),
                 input_attributes,
                 "1.2",
             )

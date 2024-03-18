@@ -928,6 +928,7 @@ mod definitions {
 
     #[allow(non_snake_case)]
     pub(crate) unsafe fn rtContextCreate(context: *mut Context) -> Result<(), RTresult> {
+        print!("Create HIPRT Context\n");
         context::create(context)
     }
 

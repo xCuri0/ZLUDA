@@ -65,6 +65,8 @@ impl GeometryTrianglesData {
             triangleIndices: ptr::null_mut(),
             triangleCount: 0,
             triangleStride: 0,
+            trianglePairIndices: ptr::null_mut(),
+            trianglePairCount: 0,
         };
         if let Some(ref vertex_indices) = self.indices {
             let index_buffer = vertex_indices

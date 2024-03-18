@@ -839,7 +839,7 @@ pub(crate) struct TrivialHIPAllocator {
     context: hiprtContext,
     hiprt: Rc<HipRt>,
     geometries: Vec<hiprtGeometry>,
-    func_tables: Vec<hiprtCustomFuncTable>,
+    func_tables: Vec<hiprtFuncTable>,
     scenes: Vec<hiprtScene>,
     allocations: Vec<hipDeviceptr_t>,
     drop_flag: bool,
@@ -858,24 +858,27 @@ impl TrivialHIPAllocator {
         }
     }
 
-    pub(crate) fn new_func_table(&mut self) -> Result<hiprtCustomFuncTable, RTresult> {
+    pub(crate) fn new_func_table(&mut self) -> Result<hiprtFuncTable, RTresult> {
         let mut custom_func_table = ptr::null_mut();
-        hiprt! { self.hiprt.hiprtCreateCustomFuncTable(self.context, &mut custom_func_table), RT_ERROR_UNKNOWN };
+
+        // CHECK THIS
+        hiprt! { self.hiprt.hiprtCreateFuncTable(self.context, 0, 1, &mut custom_func_table), RT_ERROR_UNKNOWN };
         Ok(custom_func_table)
     }
 
+    // CHECK BUILD OPTIONS
     pub(crate) fn new_scene(
         &mut self,
         scene_input: hiprtSceneBuildInput,
         build_options: hiprtBuildOptions,
     ) -> Result<hiprtScene, RTresult> {
         let mut temp_mem_size = 0;
-        hiprt! { self.hiprt.hiprtGetSceneBuildTemporaryBufferSize(self.context, &scene_input, &build_options, &mut temp_mem_size), RT_ERROR_UNKNOWN };
+        hiprt! { self.hiprt.hiprtGetSceneBuildTemporaryBufferSize(self.context, &scene_input, build_options, &mut temp_mem_size), RT_ERROR_UNKNOWN };
         let temp_mem = self.allocate(temp_mem_size)?;
         let mut scene = ptr::null_mut();
-        hiprt! { self.hiprt.hiprtCreateScene(self.context, &scene_input, &build_options, &mut scene), RT_ERROR_UNKNOWN };
+        hiprt! { self.hiprt.hiprtCreateScene(self.context, &scene_input, build_options, &mut scene), RT_ERROR_UNKNOWN };
         self.scenes.push(scene);
-        hiprt! { self.hiprt.hiprtBuildScene(self.context, hiprtBuildOperation::hiprtBuildOperationBuild, &scene_input, &build_options, temp_mem.0, ptr::null_mut(), scene), RT_ERROR_UNKNOWN };
+        hiprt! { self.hiprt.hiprtBuildScene(self.context, hiprtBuildOperation::hiprtBuildOperationBuild, &scene_input, build_options, temp_mem.0, ptr::null_mut(), scene), RT_ERROR_UNKNOWN };
         Ok(scene)
     }
 
@@ -885,12 +888,12 @@ impl TrivialHIPAllocator {
         build_options: hiprtBuildOptions,
     ) -> Result<hiprtGeometry, RTresult> {
         let mut temp_mem_size = 0;
-        hiprt! { self.hiprt.hiprtGetGeometryBuildTemporaryBufferSize(self.context, &geometry_input, &build_options, &mut temp_mem_size), RT_ERROR_UNKNOWN };
+        hiprt! { self.hiprt.hiprtGetGeometryBuildTemporaryBufferSize(self.context, &geometry_input, build_options, &mut temp_mem_size), RT_ERROR_UNKNOWN };
         let temp_mem = self.allocate(temp_mem_size)?;
         let mut geometry = ptr::null_mut();
-        hiprt! { self.hiprt.hiprtCreateGeometry(self.context, &geometry_input, &build_options, &mut geometry), RT_ERROR_UNKNOWN };
+        hiprt! { self.hiprt.hiprtCreateGeometry(self.context, &geometry_input, build_options, &mut geometry), RT_ERROR_UNKNOWN };
         self.geometries.push(geometry);
-        hiprt! { self.hiprt.hiprtBuildGeometry(self.context, hiprtBuildOperation::hiprtBuildOperationBuild, &geometry_input, &build_options, temp_mem.0, ptr::null_mut(), geometry), RT_ERROR_UNKNOWN };
+        hiprt! { self.hiprt.hiprtBuildGeometry(self.context, hiprtBuildOperation::hiprtBuildOperationBuild, &geometry_input, build_options, temp_mem.0, ptr::null_mut(), geometry), RT_ERROR_UNKNOWN };
         Ok(geometry)
     }
 
@@ -930,7 +933,7 @@ impl TrivialHIPAllocator {
                 .fold(geometries_result, |result, func_table| {
                     let destroy_result = match unsafe {
                         self.hiprt
-                            .hiprtDestroyCustomFuncTable(self.context, func_table)
+                            .hiprtDestroyFuncTable(self.context, func_table)
                     } {
                         hiprtError::hiprtSuccess => Ok(()),
                         _ => Err(RTresult::RT_ERROR_UNKNOWN),

@@ -486,6 +486,26 @@ impl<'a> PtxInput<'a> {
     }
 }
 
+
+extern "C" {
+    pub fn buildTraceKernel(
+        context: hiprtContext,
+        funcName: *mut *const ::std::os::raw::c_char,
+        src: *const ::std::os::raw::c_char,
+        moduleName: *const ::std::os::raw::c_char,
+        numHeaders: u32,
+        headers: *mut *const ::std::os::raw::c_char,
+        includeNames: *mut *const ::std::os::raw::c_char,
+        numOptions: u32,
+        options: *mut *const ::std::os::raw::c_char,
+        numGeomTypes: u32,
+        numRayTypes: u32,
+        funcNameSets: *mut hiprtFuncNameSet,
+        moduleOut: *mut hiprtApiModule,
+        cache: bool,
+    ) -> hiprtError;
+}
+
 // TODO: drop rtc program
 unsafe fn build(
     weak_context: Weak<OptixCell<ContextData>>,
@@ -497,6 +517,8 @@ unsafe fn build(
     program_name: &CStr,
     context: hiprtContext,
 ) -> Result<(ProgramData, VariablesBlock, bool), RTresult> {
+
+    print!("\nBuild HIP RT\n");
     let ast =
         ptx::ModuleParser::parse_checked(text).map_err(|_| RTresult::RT_ERROR_INVALID_SOURCE)?;
     let raytracing_module = ptx::to_llvm_module_for_raytracing(
@@ -535,21 +557,30 @@ unsafe fn build(
         .iter()
         .map(|s| s.as_ptr())
         .collect::<Vec<_>>();
-    hiprt! {
-        hiprt.hiprtBuildTraceProgram(
-            context,
-            raytracing::Module::KERNEL_NAME.as_ptr(),
-            raytracing_module.kernel_source.as_ptr() as _,
-            "zluda_rt_kernel\0".as_ptr() as _,
-            headers.len() as i32,
-            headers.as_ptr() as _,
-            header_names.as_ptr() as _,
-            options.as_ptr() as _,
-            options.len() as i32,
-            (&mut rt_program) as *mut _ as _
-        ),
-        RT_ERROR_INVALID_SOURCE
-    };
+
+    let mut function_name = ptr::null_mut::<c_void>();
+
+
+    // TODO: FIX THIS SHIT SO WE DONT NEED CUSTOM HIPRT
+    print!("\nBuilding kernels\n");
+    buildTraceKernel(
+        context,
+        raytracing::Module::KERNEL_NAME.as_ptr() as _,
+        raytracing_module.kernel_source.as_ptr() as _,
+        "zluda_rt_kernel\0".as_ptr() as _,
+        headers.len() as u32,
+        headers.as_ptr() as _,
+        header_names.as_ptr() as _,
+        options.len() as u32,
+        options.as_ptr() as _,
+        0,
+        1, // CHECK
+        std::ptr::null_mut(),
+        (&mut rt_program) as *mut _ as _,
+        false
+    );
+
+    print!("\nDone build HIP RT\n");
     let main_bitcode = get_bitcode(rt_program)?;
     let binary = llvm::MemoryBuffer::create_no_copy(&main_bitcode, false);
     let isa_main = CStr::from_bytes_with_nul_unchecked(b"raytracing_main\0");
@@ -562,6 +593,7 @@ unsafe fn build(
             &raytracing_module.linker_module,
         )
         .map_err(|_| RTresult::RT_ERROR_UNKNOWN)?;
+    print!("\nDone COMMGR\n");
     let module = hip::Module::load_data(&binary).map_err(|_| RTresult::RT_ERROR_UNKNOWN)?;
     Ok((
         ProgramData {

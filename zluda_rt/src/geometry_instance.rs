@@ -116,8 +116,8 @@ impl GeometryInstanceData {
         )?;
         let intersect_func = program_intersection.get_function()?;
         let mut bounding_box_fn = program_bounding_box.get_function()?;
-        let custom_func_set = hiprtCustomFuncSet {
-            intersectFunc: unsafe { mem::transmute(intersect_func) },
+        let custom_func_set = hiprtFuncDataSet {
+            filterFuncData: unsafe { mem::transmute(intersect_func) }, // CHECK THIS
             intersectFuncData: intersection_input.0,
         };
         let mut bounding_box_primitive_count = geometry.primitive_count;
@@ -129,7 +129,7 @@ impl GeometryInstanceData {
         let mut bounding_boxes_device = allocator
             .allocate(mem::size_of::<f32>() * 8 * bounding_box_primitive_count as usize)?;
         let mut params = [
-            global_state as *mut repr_gpu::GlobalState as *mut c_void, 
+            global_state as *mut repr_gpu::GlobalState as *mut c_void,
             &mut bounding_box_fn as *mut _ as *mut c_void,
             &mut bounding_box_primitive_count as *mut _ as _,
             &mut bounding_boxes_device.0 as *mut _ as _,
@@ -153,20 +153,19 @@ impl GeometryInstanceData {
         };
         let geometry_input = hiprtGeometryBuildInput {
             type_: hiprtPrimitiveType::hiprtPrimitiveTypeAABBList,
-            __bindgen_anon_1: hiprtGeometryBuildInput__bindgen_ty_1 {
-                aabbList: hiprtGeometryBuildInput__bindgen_ty_1__bindgen_ty_2 {
-                    primitive: &mut aabb_list,
-                    customType: custom_func_set_counter,
-                },
+            geomType: 0,
+            primitive: hiprtGeometryBuildInput__bindgen_ty_1 {
+                aabbList: aabb_list,
             },
-            nodes: ptr::null_mut(),
+            nodeList: hiprtBvhNodeList{nodes: ptr::null_mut(), nodeCount: 0},
         };
         let build_options = hiprtBuildOptions {
-            buildFlags: build_flags.0,
+            buildFlags: build_flags.0 as u32,
+            batchBuildMaxPrimCount: 512,
         };
         let hiprt_geometry = allocator.new_geometry(geometry_input, build_options)?;
         Ok(DeviceGeometryInstance::Geometry {
-            hiprt_geometry: hipDeviceptr_t(hiprt_geometry),
+            hiprt_geometry: hipDeviceptr_t(hiprt_geometry as *mut c_void), // CHECK
             custom_func_set,
         })
     }
@@ -234,19 +233,19 @@ impl GeometryInstanceData {
         let mut primitive = triangles.to_hiprt()?;
         let geometry_input = hiprtGeometryBuildInput {
             type_: hiprtPrimitiveType::hiprtPrimitiveTypeTriangleMesh,
-            __bindgen_anon_1: hiprtGeometryBuildInput__bindgen_ty_1 {
-                triangleMesh: hiprtGeometryBuildInput__bindgen_ty_1__bindgen_ty_1 {
-                    primitive: &mut primitive,
-                },
+            geomType: 0,
+            primitive: hiprtGeometryBuildInput__bindgen_ty_1 {
+                triangleMesh: primitive,
             },
-            nodes: ptr::null_mut(),
+            nodeList: hiprtBvhNodeList{nodes: ptr::null_mut(), nodeCount: 0},
         };
         let build_options = hiprtBuildOptions {
-            buildFlags: build_flags.0,
+            buildFlags: build_flags.0 as u32,
+            batchBuildMaxPrimCount: 512,
         };
         let hiprt_geometry = allocator.new_geometry(geometry_input, build_options)?;
         Ok(DeviceGeometryInstance::GeometryTriangles {
-            hiprt_geometry: hipDeviceptr_t(hiprt_geometry),
+            hiprt_geometry: hipDeviceptr_t(hiprt_geometry as *mut c_void ), // CHECK
         })
     }
 }
@@ -270,7 +269,7 @@ impl OptixObjectData for GeometryInstanceData {
 pub(crate) enum DeviceGeometryInstance {
     Geometry {
         hiprt_geometry: hipDeviceptr_t,
-        custom_func_set: hiprtCustomFuncSet,
+        custom_func_set: hiprtFuncDataSet,
     },
     GeometryTriangles {
         hiprt_geometry: hipDeviceptr_t,
