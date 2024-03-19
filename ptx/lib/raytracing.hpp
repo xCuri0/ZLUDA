@@ -381,21 +381,13 @@ extern "C" {
          └────────────────────┘
     */
 // HACK START
+// PLZ FIX
 }
 
 using BoxNode = hiprt::BoxNode;
-using Ray = hiprt::Ray;
-using InstanceNode = hiprt::InstanceNode;
-using CustomNode = hiprt::CustomNode;
-using TriangleNode = hiprt::TriangleNode;
-using GeomHeader = hiprt::GeomHeader;
 using Frame = hiprt::Frame;
-using SceneHeader = hiprt::SceneHeader;
-using Transform = hiprt::Transform;
-template <typename Stack>
-using TraversalBase = hiprt::TraversalBase<Stack>;
-template<uint32_t StackSize>
-using PrivateStack = hiprt::PrivateStack<StackSize>;
+using GeomHeader = hiprt::GeomHeader;
+using InstanceNode = hiprt::InstanceNode;
 
 struct IntersectResult {
     bool hit;
@@ -419,7 +411,7 @@ struct hiprtHit2 {
 typedef IntersectResult ( *hiprtIntersectFunc2 )(hiprtRay ray, uint32_t primIdx, const void* data, void* payload );
 
 template <typename Stack, hiprtTraversalType TraversalType>
-class SceneTraversal2 : public TraversalBase<Stack>
+class SceneTraversal2 : public hiprt::TraversalBase<Stack>
 {
 public:
 	HIPRT_DEVICE SceneTraversal2( hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, Stack& stack );
@@ -427,24 +419,10 @@ public:
 	HIPRT_DEVICE SceneTraversal2(
 		hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, hiprtFuncTable funcTable, Stack& stack, void* payload = nullptr );
 
-	HIPRT_DEVICE void transformRay( Ray& ray, float3& invD, float3& oxInvD, const InstanceNode& node ) const;
-
-	HIPRT_DEVICE void restoreRay( Ray& ray, float3& invD, float3& oxInvD ) const;
-
     HIPRT_DEVICE void set_ray_maxT(float x)
     {
         m_ray.maxT = x;
     }
-
-	HIPRT_DEVICE bool testLeafNode(
-		const Ray&	  ray,
-		const float3& invD,
-		int			  leafIndex,
-		int			  shapeId,
-		int&		  hitIndex,
-		float2&		  hitUv,
-		float3&		  hitNormal,
-		float&		  hitT );
 
 	HIPRT_DEVICE hiprtHit2 getNextHit2();
 	HIPRT_DEVICE hiprtHit getNextHit() {
@@ -453,12 +431,12 @@ public:
     }
 
 protected:
-	using TraversalBase<Stack>::m_ray;
-	using TraversalBase<Stack>::m_state;
-	using TraversalBase<Stack>::m_stack;
-	using TraversalBase<Stack>::m_payload;
+	using hiprt::TraversalBase<Stack>::m_ray;
+	using hiprt::TraversalBase<Stack>::m_state;
+	using hiprt::TraversalBase<Stack>::m_stack;
+	using hiprt::TraversalBase<Stack>::m_payload;
 #if defined( __USE_HWI__ )
-	using TraversalBase<Stack>::m_descriptor;
+	using hiprt::TraversalBase<Stack>::m_descriptor;
 #endif
 
 	int					 m_nodeIndex;
@@ -470,273 +448,6 @@ protected:
 	hiprtRayMask		 m_mask;
 	hiprtFuncTable m_funcTable;
 };
-
-template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE SceneTraversal2<Stack, TraversalType>::SceneTraversal2( hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, Stack& stack )
-	: TraversalBase<Stack>( ray, stack, nullptr ), m_funcTable( nullptr ), m_mask( mask ), m_instanceIndex( hiprtInvalidValue ), m_nodeIndex( hiprt::RootIndex )
-{
-	SceneHeader* data = (SceneHeader*)scene;
-	m_boxNodes		  = data->m_boxNodes;
-	m_instanceNodes	  = data->m_primNodes;
-	m_geoms			  = data->m_geoms;
-	m_frames		  = data->m_frames;
-	m_stack.reset();
-}
-
-template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE SceneTraversal2<Stack, TraversalType>::SceneTraversal2(
-	hiprtScene scene, const hiprtRay& ray, hiprtRayMask mask, hiprtFuncTable funcTable, Stack& stack, void* payload )
-	: TraversalBase<Stack>( ray, stack, payload ), m_funcTable( funcTable ), m_mask( mask ), m_instanceIndex( hiprtInvalidValue ),
-	  m_nodeIndex( hiprt::RootIndex )
-{
-	SceneHeader* data = (SceneHeader*)scene;
-	m_boxNodes		  = data->m_boxNodes;
-	m_instanceNodes	  = data->m_primNodes;
-	m_geoms			  = data->m_geoms;
-	m_frames		  = data->m_frames;
-	m_stack.reset();
-}
-
-__device__ static inline float3 invTransform2(Frame& frame, const float3& p )
-{
-	float3 result = p;
-	result = result - frame.m_translation;
-	result = hiprt::qtInvRotate( hiprt::qtFromAxisAngle( frame.m_rotation ), result );
-	result = result / frame.m_scale;
-	return result;
-}
-
-__device__ static inline Ray transformRay2(Transform& transform, Ray& ray)
-{
-	Frame frame		   = transform.interpolateFrames( ray.m_time );
-    if ( frame.m_translation.x != 0.0f || frame.m_translation.y != 0.0f || frame.m_translation.z != 0.0f
-        || frame.m_rotation.w != 0.0f
-        || frame.m_scale.x != 1.0f || frame.m_scale.y != 1.0f || frame.m_scale.z != 1.0f )
-    {
-		Ray	  outRay;
-		outRay.m_origin	   = invTransform2(frame, ray.m_origin );
-		outRay.m_direction = invTransform2(frame, ray.m_origin + ray.m_direction );
-		outRay.m_direction = outRay.m_direction - outRay.m_origin;
-		outRay.m_time	   = ray.m_time;
-		outRay.m_maxT	   = ray.m_maxT;
-        return outRay;
-    }
-    else
-    {
-        return ray;
-    }
-}
-
-template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE void SceneTraversal2<Stack, TraversalType>::transformRay(
-	Ray& ray, float3& invD, float3& oxInvD, const InstanceNode& node ) const
-{
-	Transform tr( m_frames + node.m_frameIndex, node.m_frameCount );
-	ray	   = transformRay2( tr, ray );
-	invD   = hiprt::safeInv( ray.m_direction );
-	oxInvD = -ray.m_origin * invD;
-}
-
-template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE void
-SceneTraversal2<Stack, TraversalType>::restoreRay( Ray& ray, float3& invD, float3& oxInvD ) const
-{
-	ray.m_origin	= m_ray.origin;
-	ray.m_direction = m_ray.direction;
-	invD			= hiprt::safeInv( m_ray.direction );
-	oxInvD			= -m_ray.origin * invD;
-}
-
-template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE bool SceneTraversal2<Stack, TraversalType>::testLeafNode(
-	const Ray&	  ray,
-	const float3& invD,
-	int			  leafIndex,
-	int			  instanceId,
-	int&		  hitIndex,
-	float2&		  hitUv,
-	float3&		  hitNormal,
-	float&		  hitT )
-{
-	bool			  hit  = false;
-	const GeomHeader* geom = m_geoms[instanceId];
-	int				  type = geom->m_customType;
-	if ( type == hiprtInvalidValue )
-	{
-		TriangleNode node = ( (TriangleNode*)geom->m_primNodes )[hiprt::getNodeAddr( leafIndex )];
-#if !defined( __USE_HWI__ )
-		hit = node.m_triangle.intersect( ray, hitUv, hitT );
-		if ( hit )
-		{
-			hitIndex  = node.m_primIndex;
-			hitNormal = node.m_triangle.normal();
-		}
-#else
-		auto result = __builtin_amdgcn_image_bvh_intersect_ray_l(
-			hiprt::encodeBaseAddr( geom->m_primNodes, leafIndex ),
-			ray.m_maxT,
-			make_float4( ray.m_origin.x, ray.m_origin.y, ray.m_origin.z, ray.m_origin.z ).data,
-			make_float4( ray.m_direction.x, ray.m_direction.y, ray.m_direction.z, ray.m_direction.z ).data,
-			make_float4( invD.x, invD.y, invD.z, invD.z ).data,
-			m_descriptor.data );
-		float invDenom = __ocml_native_recip_f32( __int_as_float( result[1] ) );
-		float t		   = __int_as_float( result[0] ) * invDenom;
-		hit			   = t <= ray.m_maxT;
-		if ( hit )
-		{
-			hitT	  = t;
-			hitUv.x	  = __int_as_float( result[2] ) * invDenom;
-			hitUv.y	  = __int_as_float( result[3] ) * invDenom;
-			hitIndex  = node.m_primIndex;
-			hitNormal = node.m_triangle.normal();
-		}
-#endif
-	}
-	else
-	{
-		CustomNode			node	  = ( (CustomNode*)geom->m_primNodes )[hiprt::getNodeAddr( leafIndex )];
-		hiprtCustomFuncSet* funcTable = (hiprtFuncSet*)m_funcTable;
-		IntersectResult     result    = ((hiprtIntersectFunc2)(funcTable[type].intersectFunc))(
-			  reinterpret_cast<const hiprtRay&>(ray),
-			  node.m_primIndex,
-			  funcTable[type].intersectFuncData,
-			  m_payload );
-		if ( result.hit ) {
-            hitIndex = node.m_primIndex;
-            hit = true;
-            hitT = result.t;
-            hitUv = result.uv;
-            hitNormal = result.normal;
-        }
-	}
-	return hit;
-}
-
-
-template <typename Stack, hiprtTraversalType TraversalType>
-HIPRT_DEVICE hiprtHit2 SceneTraversal2<Stack, TraversalType>::getNextHit2()
-{
-	int instanceId	  = hiprtInvalidValue;
-	int nodeIndex	  = m_nodeIndex;
-	int instanceIndex = m_instanceIndex;
-
-	Ray	   ray = *(Ray*)&m_ray;
-	float3 invD, oxInvD;
-	if ( instanceIndex == hiprtInvalidValue )
-	{
-		restoreRay( ray, invD, oxInvD );
-	}
-	else
-	{
-		InstanceNode node = m_instanceNodes[hiprt::getNodeAddr( instanceIndex )];
-		instanceId		  = node.m_primIndex;
-		transformRay( ray, invD, oxInvD, node );
-	}
-
-	int	   hitInstanceId	= hiprtInvalidValue;
-	int	   hitInstanceIndex = hiprtInvalidValue;
-	int	   hitPrimIndex		= hiprtInvalidValue;
-	float  hitT				= 0.0f;
-	float2 hitUv			= make_float2( 0.0f, 0.0f );
-	float3 hitNormal;
-
-	if ( m_stack.empty() ) m_stack.push( hiprtInvalidValue );
-
-	while ( nodeIndex != hiprtInvalidValue && m_state != hiprtTraversalStateStackOverflow )
-	{
-		if ( hiprt::isInternalNode( nodeIndex ) )
-		{
-			BoxNode* nodes = ( instanceId == hiprtInvalidValue ) ? m_boxNodes : m_geoms[instanceId]->m_boxNodes;
-			if ( this->testInternalNode( ray, invD, oxInvD, nodes, nodeIndex ) )
-				continue;
-		}
-		else
-		{
-			if ( instanceId != hiprtInvalidValue )
-			{
-				if ( testLeafNode( ray, invD, nodeIndex, instanceId, hitPrimIndex, hitUv, hitNormal, hitT ) )
-				{
-					if constexpr ( TraversalType == hiprtTraversalTerminateAtAnyHit )
-					{
-						m_nodeIndex		= m_stack.pop();
-						m_instanceIndex = instanceIndex;
-						m_state			= hiprtTraversalStateHit;
-						if ( m_nodeIndex == hiprtInvalidValue && !m_stack.empty() )
-						{
-							m_instanceIndex = hiprtInvalidValue;
-							m_nodeIndex		= m_stack.pop();
-						}
-						InstanceNode& node = m_instanceNodes[hiprt::getNodeAddr( instanceIndex )];
-						Transform	 tr( m_frames + node.m_frameIndex, node.m_frameCount );
-						hitNormal = tr.transformNormal( hitNormal, ray.m_time );
-						return hiprtHit2
-                        {
-                            (uint32_t)instanceId,
-                            (uint32_t)hitPrimIndex,
-                            hitUv,
-                            hitNormal,
-                            hitT,
-                            ray.m_origin,
-                            ray.m_direction
-                        };
-					}
-					else
-					{
-						hitInstanceId	 = instanceId;
-						hitInstanceIndex = instanceIndex;
-						ray.m_maxT		 = hitT;
-					}
-				}
-			}
-			else
-			{
-				InstanceNode node = m_instanceNodes[hiprt::getNodeAddr( nodeIndex )];
-				if ( node.m_mask & m_mask )
-				{
-					if ( instanceId != node.m_primIndex )
-					{
-						if ( m_stack.vacancy() < 1 )
-						{
-							m_state = hiprtTraversalStateStackOverflow;
-							continue;
-						}
-						m_stack.push( hiprtInvalidValue );
-					}
-					instanceIndex = nodeIndex;
-					nodeIndex	  = hiprt::RootIndex;
-					instanceId	  = node.m_primIndex;
-					transformRay( ray, invD, oxInvD, node );
-					continue;
-				}
-			}
-		}
-		nodeIndex = m_stack.pop();
-		if ( nodeIndex == hiprtInvalidValue && !m_stack.empty() )
-		{
-			instanceIndex = hiprtInvalidValue;
-			instanceId	  = hiprtInvalidValue;
-			nodeIndex	  = m_stack.pop();
-			restoreRay( ray, invD, oxInvD );
-		}
-	}
-
-	hiprtHit2 result{ hiprtInvalidValue, hiprtInvalidValue, { 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, -1.0f, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } };
-	if ( hitInstanceId != hiprtInvalidValue )
-	{
-		InstanceNode node = m_instanceNodes[hiprt::getNodeAddr( hitInstanceIndex )];
-		Transform	 tr( m_frames + node.m_frameIndex, node.m_frameCount );
-		result.t		  = hitT;
-		result.instanceID = hitInstanceId;
-		result.primID	  = hitPrimIndex;
-		result.uv		  = hitUv;
-		result.normal	  = tr.transformNormal( hitNormal, ray.m_time );
-		result.origin	  = ray.m_origin;
-		result.direction  = ray.m_direction;
-	}
-	if ( m_state != hiprtTraversalStateStackOverflow )
-		m_state = hiprtTraversalStateFinished;
-	return result;
-}
 
 __device__ static inline void ZLUDA_RT(set_attr_barycentrics)(
     uint8_t GLOBAL_SPACE* attr_block,
